@@ -245,8 +245,8 @@ function App(){
 
   // Setup: 이름
   if(!userName) return(
-    <div style={{minHeight:"100vh",background:BG,display:"flex",alignItems:"center",justifyContent:"center"}}>
-      <div style={{background:CARD_BG,borderRadius:28,padding:"36px 28px",width:300,textAlign:"center",boxShadow:`0 8px 32px ${L}`}}>
+    <div style={{minHeight:"100vh",background:"#f4f5f7",display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{background:"#fff",borderRadius:28,padding:"36px 28px",width:300,textAlign:"center",boxShadow:`0 8px 32px ${L}`}}>
         <div style={{fontWeight:900,fontSize:32,color:AC,letterSpacing:3,marginBottom:6,fontFamily:JALNAN}}>DAYCLIK!</div>
         <div style={{color:SUB,fontSize:13,marginBottom:24}}>매시간 새로운 사진 미션</div>
         <input style={INP} placeholder="닉네임 입력" value={nameInput} onChange={e=>setNameInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&nameInput.trim()&&setUserName(nameInput.trim())}/>
@@ -257,8 +257,8 @@ function App(){
 
   // Setup: 그룹
   if(!joined) return(
-    <div style={{minHeight:"100vh",background:BG,display:"flex",alignItems:"center",justifyContent:"center"}}>
-      <div style={{background:CARD_BG,borderRadius:28,padding:"36px 28px",width:300,textAlign:"center",boxShadow:`0 8px 32px ${L}`}}>
+    <div style={{minHeight:"100vh",background:"#f4f5f7",display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{background:"#fff",borderRadius:28,padding:"36px 28px",width:300,textAlign:"center",boxShadow:`0 8px 32px ${L}`}}>
         <div style={{fontWeight:900,fontSize:28,color:AC,letterSpacing:3,marginBottom:4,fontFamily:JALNAN}}>DAYCLIK!</div>
         <div style={{color:SUB,fontSize:13,marginBottom:24}}>코드로 친구와 함께해요</div>
         <button style={{...BTN(AC),marginBottom:10}} onClick={()=>{const c=genCode();setGroupCode(c);setJoined(true);}}>새 그룹 만들기</button>
