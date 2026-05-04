@@ -21,7 +21,6 @@
 <script type="text/babel">
 const {useState,useEffect,useRef}=React;
 
-// Firebase
 const firebaseConfig={
   apiKey:"AIzaSyCEEFEtb-X8FEb0HJIXKoRnkgUTypCHpM0",
   authDomain:"day-click.firebaseapp.com",
@@ -33,7 +32,6 @@ const firebaseConfig={
 firebase.initializeApp(firebaseConfig);
 const db=firebase.firestore();
 
-// Cloudinary
 const CLD_CLOUD="duahjg6jf",CLD_PRESET="claude";
 async function uploadImg(dataUrl){
   const blob=await(await fetch(dataUrl)).blob();
@@ -68,11 +66,9 @@ const CAL_DAYS=["SUN","MON","TUE","WED","THU","FRI","SAT"];
 const JALNAN="'여기어때 잘난체','Apple SD Gothic Neo',sans-serif";
 const FONT="'Apple SD Gothic Neo','AppleSDGothicNeo',sans-serif";
 
-// 밝기 판단 → 텍스트 색상 결정
 function getTextColor(hex){
   const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
-  const lum=(0.299*r+0.587*g+0.114*b)/255;
-  return lum>0.55?"#111":"#fff";
+  return(0.299*r+0.587*g+0.114*b)/255>0.55?"#111":"#fff";
 }
 function lighten(hex,a=0.15){
   const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
@@ -89,7 +85,6 @@ function pickChallenge(chs,hk){let h=0;for(let c of hk)h=(h*31+c.charCodeAt(0))%
 function getDIM(y,m){return new Date(y,m+1,0).getDate();}
 function getFD(y,m){return new Date(y,m,1).getDay();}
 
-// 캐시 저장/불러오기
 function saveCache(key,val){try{localStorage.setItem("dayclik_"+key,JSON.stringify(val));}catch{}}
 function loadCache(key,def){try{const v=localStorage.getItem("dayclik_"+key);return v?JSON.parse(v):def;}catch{return def;}}
 
@@ -99,7 +94,7 @@ function App(){
   const [groupCode,setGroupCode]=useState(()=>loadCache("groupCode",""));
   const [inputCode,setInputCode]=useState("");
   const [joined,setJoined]=useState(()=>loadCache("joined",false));
-  const [challenges,setChallenges]=useState(()=>loadCache("challenges",DEFAULT_CHALLENGES));
+  const [challenges,setChallenges]=useState(DEFAULT_CHALLENGES);
   const [newChallenge,setNewChallenge]=useState("");
   const [hourKey,setHourKey]=useState(getHourKey());
   const [started,setStarted]=useState(false);
@@ -120,7 +115,7 @@ function App(){
   const [customColors,setCustomColors]=useState(()=>loadCache("customColors",[]));
   const [pickerColor,setPickerColor]=useState("#ff9999");
   const [pickerName,setPickerName]=useState("");
-  const [calTitles,setCalTitles]=useState(()=>loadCache("calTitles",{}));
+  const [calTitles,setCalTitles]=useState({});
   const [calTitleInput,setCalTitleInput]=useState("");
   const [calTitleModal,setCalTitleModal]=useState(null);
   const [calDetailDay,setCalDetailDay]=useState(null);
@@ -133,22 +128,20 @@ function App(){
   const L=lighten(accent,0.18);
   const ML=lighten(accent,0.35);
   const PS=pastel(accent);
-  const BG="#111";
-  const CARD_BG="#1a1a1a";
-  const BORDER="#2a2a2a";
-  const TEXT="#f0f0f0";
-  const SUB="#888";
+  const BG="#f4f5f7";
+  const CARD_BG="#ffffff";
+  const BORDER="#e0e0e0";
+  const TEXT="#1a1a1a";
+  const SUB="#888888";
   const cur=pickChallenge(challenges,hourKey);
 
-  // 캐시 동기화
+  // 캐시 동기화 (닉네임, 그룹코드, 테마, 프로필, 커스텀색상)
   useEffect(()=>saveCache("groupCode",groupCode),[groupCode]);
   useEffect(()=>saveCache("joined",joined),[joined]);
   useEffect(()=>saveCache("userName",userName),[userName]);
   useEffect(()=>saveCache("accent",accent),[accent]);
   useEffect(()=>saveCache("profileImg",profileImg),[profileImg]);
-  useEffect(()=>saveCache("challenges",challenges),[challenges]);
   useEffect(()=>saveCache("customColors",customColors),[customColors]);
-  useEffect(()=>saveCache("calTitles",calTitles),[calTitles]);
 
   // Firestore 사진 구독
   useEffect(()=>{
@@ -163,6 +156,26 @@ function App(){
     if(!groupCode||!joined)return;
     return db.collection("groups").doc(groupCode).collection("members")
       .onSnapshot(snap=>setMembers(snap.docs.map(d=>({id:d.id,...d.data()}))));
+  },[groupCode,joined]);
+
+  // Firestore 캘린더 제목 구독
+  useEffect(()=>{
+    if(!groupCode||!joined)return;
+    return db.collection("groups").doc(groupCode).collection("calTitles")
+      .onSnapshot(snap=>{
+        const titles={};
+        snap.docs.forEach(d=>titles[d.id]=d.data().title);
+        setCalTitles(titles);
+      });
+  },[groupCode,joined]);
+
+  // Firestore 챌린지 목록 구독
+  useEffect(()=>{
+    if(!groupCode||!joined)return;
+    return db.collection("groups").doc(groupCode).collection("settings").doc("challenges")
+      .onSnapshot(snap=>{
+        if(snap.exists){const data=snap.data().list;if(data&&data.length>0)setChallenges(data);}
+      });
   },[groupCode,joined]);
 
   // 멤버 등록
@@ -226,6 +239,16 @@ function App(){
     setCommentInputs(p=>({...p,[photoId]:""}));
   }
 
+  async function saveCalTitle(dk,title){
+    await db.collection("groups").doc(groupCode).collection("calTitles").doc(dk).set({title});
+    setCalTitles(p=>({...p,[dk]:title}));
+  }
+
+  async function saveChallenges(list){
+    setChallenges(list);
+    await db.collection("groups").doc(groupCode).collection("settings").doc("challenges").set({list});
+  }
+
   async function generateAi(){
     if(!newChallenge.trim()){alert("주제를 먼저 입력해주세요.");return;}
     setAiLoading(true);
@@ -233,45 +256,46 @@ function App(){
       const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:600,messages:[{role:"user",content:`"${newChallenge}" 주제로 포토 챌린지 미션 10개를 한국어로 만들어줘. 이모지 없이, 각각 한 문장으로, 번호 없이 줄바꿈으로만 구분해서 출력해.`}]})});
       const data=await res.json();
       const t=data.content?.[0]?.text?.trim();
-      if(t)setChallenges(p=>[...p,...t.split("\n").map(l=>l.trim()).filter(Boolean).slice(0,10)]);
+      if(t)saveChallenges([...challenges,...t.split("\n").map(l=>l.trim()).filter(Boolean).slice(0,10)]);
     }catch{}
     setAiLoading(false);
   }
 
   function share(code){const msg=`DAYCLIK! 그룹 코드: ${code}`;navigator.clipboard?.writeText(msg).catch(()=>{});alert(`클립보드에 복사됐어요:\n${msg}`);}
 
-  const INP={width:"100%",padding:"11px 15px",borderRadius:13,border:`1.5px solid ${BORDER}`,background:"#222",color:TEXT,fontSize:14,marginBottom:10,boxSizing:"border-box",fontFamily:FONT,outline:"none"};
+  const INP={width:"100%",padding:"11px 15px",borderRadius:13,border:`1.5px solid ${BORDER}`,background:"#f9f9f9",color:TEXT,fontSize:14,marginBottom:10,boxSizing:"border-box",fontFamily:FONT,outline:"none"};
   const BTN=(bg,col)=>({width:"100%",padding:"13px",borderRadius:14,border:"none",background:bg,color:col||getTextColor(bg),fontWeight:700,fontSize:15,cursor:"pointer",fontFamily:FONT});
+  const CARD={background:CARD_BG,borderRadius:20,overflow:"hidden",marginBottom:14,border:`1px solid ${BORDER}`};
 
-  // Setup: 이름
+  // 닉네임 입력
   if(!userName) return(
-    <div style={{minHeight:"100vh",background:"#f4f5f7",display:"flex",alignItems:"center",justifyContent:"center"}}>
-      <div style={{background:"#fff",borderRadius:28,padding:"36px 28px",width:300,textAlign:"center",boxShadow:`0 8px 32px ${L}`}}>
-        <div style={{fontWeight:900,fontSize:32,color:AC,letterSpacing:3,marginBottom:6,fontFamily:JALNAN}}>DAYCLIK!</div>
+    <div style={{minHeight:"100vh",background:BG,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:FONT}}>
+      <div style={{background:CARD_BG,borderRadius:28,padding:"36px 28px",width:300,textAlign:"center",boxShadow:"0 8px 32px rgba(0,0,0,0.08)"}}>
+        <div style={{fontWeight:900,fontSize:32,color:"#1a1a1a",letterSpacing:3,marginBottom:6,fontFamily:JALNAN}}>DAYCLIK!</div>
         <div style={{color:SUB,fontSize:13,marginBottom:24}}>매시간 새로운 사진 미션</div>
         <input style={INP} placeholder="닉네임 입력" value={nameInput} onChange={e=>setNameInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&nameInput.trim()&&setUserName(nameInput.trim())}/>
-        <button style={BTN(AC)} onClick={()=>nameInput.trim()&&setUserName(nameInput.trim())}>시작하기</button>
+        <button style={{width:"100%",padding:"13px",borderRadius:14,border:"none",background:"#1a1a1a",color:"#fff",fontWeight:700,fontSize:15,cursor:"pointer",fontFamily:FONT}} onClick={()=>nameInput.trim()&&setUserName(nameInput.trim())}>시작하기</button>
       </div>
     </div>
   );
 
-  // Setup: 그룹
+  // 그룹 참여
   if(!joined) return(
-    <div style={{minHeight:"100vh",background:"#f4f5f7",display:"flex",alignItems:"center",justifyContent:"center"}}>
-      <div style={{background:"#fff",borderRadius:28,padding:"36px 28px",width:300,textAlign:"center",boxShadow:`0 8px 32px ${L}`}}>
-        <div style={{fontWeight:900,fontSize:28,color:AC,letterSpacing:3,marginBottom:4,fontFamily:JALNAN}}>DAYCLIK!</div>
+    <div style={{minHeight:"100vh",background:BG,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:FONT}}>
+      <div style={{background:CARD_BG,borderRadius:28,padding:"36px 28px",width:300,textAlign:"center",boxShadow:"0 8px 32px rgba(0,0,0,0.08)"}}>
+        <div style={{fontWeight:900,fontSize:28,color:"#1a1a1a",letterSpacing:3,marginBottom:4,fontFamily:JALNAN}}>DAYCLIK!</div>
         <div style={{color:SUB,fontSize:13,marginBottom:24}}>코드로 친구와 함께해요</div>
-        <button style={{...BTN(AC),marginBottom:10}} onClick={()=>{const c=genCode();setGroupCode(c);setJoined(true);}}>새 그룹 만들기</button>
-        <div style={{color:"#444",fontSize:12,margin:"4px 0 10px"}}>또는</div>
+        <button style={{width:"100%",padding:"13px",borderRadius:14,border:"none",background:"#1a1a1a",color:"#fff",fontWeight:700,fontSize:15,cursor:"pointer",fontFamily:FONT,marginBottom:10}} onClick={()=>{const c=genCode();setGroupCode(c);setJoined(true);}}>새 그룹 만들기</button>
+        <div style={{color:"#ccc",fontSize:12,margin:"4px 0 10px"}}>또는</div>
         <input style={INP} placeholder="그룹 코드 입력" value={inputCode} onChange={e=>setInputCode(e.target.value.toUpperCase())}/>
-        <button style={BTN(lighten(AC,0.5),TEXT)} onClick={()=>{if(inputCode.trim()){setGroupCode(inputCode.trim());setJoined(true);}}}>코드로 참여하기</button>
+        <button style={{width:"100%",padding:"13px",borderRadius:14,border:"none",background:"#555",color:"#fff",fontWeight:700,fontSize:15,cursor:"pointer",fontFamily:FONT}} onClick={()=>{if(inputCode.trim()){setGroupCode(inputCode.trim());setJoined(true);}}}>코드로 참여하기</button>
       </div>
     </div>
   );
 
   // 카메라
   if(cameraActive) return(
-    <div style={{position:"fixed",inset:0,background:"#000",zIndex:200,display:"flex",flexDirection:"column"}}>
+    <div style={{position:"fixed",inset:0,background:"#000",zIndex:200,display:"flex",flexDirection:"column",fontFamily:FONT}}>
       <video ref={videoRef} style={{flex:1,width:"100%",objectFit:"cover"}} playsInline muted autoPlay/>
       <canvas ref={canvasRef} style={{display:"none"}}/>
       <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",pointerEvents:"none"}}>
@@ -289,8 +313,8 @@ function App(){
 
   // 업로드 중
   if(uploading) return(
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",zIndex:200,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
-      <div style={{color:TEXT,fontSize:18,fontWeight:700,marginBottom:12}}>사진 업로드 중...</div>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:200,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",fontFamily:FONT}}>
+      <div style={{color:"#fff",fontSize:18,fontWeight:700,marginBottom:12}}>사진 업로드 중...</div>
       <div style={{color:AC,fontSize:13}}>잠깐만 기다려주세요</div>
     </div>
   );
@@ -302,15 +326,15 @@ function App(){
     return(
       <div style={{minHeight:"100vh",background:BG,maxWidth:393,margin:"0 auto",color:TEXT,fontFamily:FONT}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"52px 20px 14px",background:CARD_BG,borderBottom:`1px solid ${BORDER}`}}>
-          <button style={{background:"none",border:"none",color:AC,fontSize:16,cursor:"pointer",fontWeight:700}} onClick={()=>setCalDetailDay(null)}>뒤로</button>
+          <button style={{background:"none",border:"none",color:"#1a1a1a",fontSize:16,cursor:"pointer",fontWeight:700}} onClick={()=>setCalDetailDay(null)}>뒤로</button>
           <span style={{fontWeight:800,fontSize:17,color:TEXT}}>{calDetailDay}{title&&` — ${title}`}</span>
-          <button style={{background:"none",border:`1.5px solid ${BORDER}`,color:AC,borderRadius:10,padding:"5px 12px",fontSize:13,cursor:"pointer",fontWeight:700}} onClick={()=>{setCalTitleInput(title);setCalEditModal(calDetailDay);}}>+</button>
+          <button style={{background:"none",border:`1.5px solid ${BORDER}`,color:"#1a1a1a",borderRadius:10,padding:"5px 12px",fontSize:13,cursor:"pointer",fontWeight:700}} onClick={()=>{setCalTitleInput(title);setCalEditModal(calDetailDay);}}>+</button>
         </div>
         <div style={{padding:16}}>
           {dp.length===0
             ?<div style={{textAlign:"center",color:SUB,padding:"60px 20px",fontSize:14}}>이날의 사진이 없어요</div>
             :dp.map(p=>(
-              <div key={p.id} style={{background:CARD_BG,borderRadius:20,overflow:"hidden",marginBottom:14,border:`1px solid ${BORDER}`}}>
+              <div key={p.id} style={CARD}>
                 <div style={{padding:"12px 14px 8px",display:"flex",alignItems:"center",gap:10}}>
                   <div style={{width:32,height:32,borderRadius:8,background:L,overflow:"hidden",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
                     {p.profileImg?<img src={p.profileImg} style={{width:"100%",height:"100%",objectFit:"cover"}} alt=""/>:<span style={{color:AC,fontSize:14,fontWeight:700}}>{p.user?.[0]}</span>}
@@ -321,10 +345,10 @@ function App(){
                 <div style={{padding:"10px 14px 14px"}}>
                   {(p.comments||[]).map((c,ci)=><div key={ci} style={{fontSize:13,color:SUB,marginBottom:6}}><b style={{color:AC}}>{c.user}</b>  {c.text}</div>)}
                   <div style={{display:"flex",gap:8,marginTop:8}}>
-                    <input style={{flex:1,padding:"9px 14px",borderRadius:20,border:`1.5px solid ${BORDER}`,background:"#222",color:TEXT,fontSize:13,outline:"none"}} placeholder="댓글 달기"
+                    <input style={{flex:1,padding:"9px 14px",borderRadius:20,border:`1.5px solid ${BORDER}`,background:"#f9f9f9",color:TEXT,fontSize:13,outline:"none"}} placeholder="댓글 달기"
                       value={commentInputs[p.id]||""} onChange={e=>setCommentInputs(pr=>({...pr,[p.id]:e.target.value}))}
                       onKeyDown={e=>e.key==="Enter"&&addComment(p.id,commentInputs[p.id]||"")}/>
-                    <button style={{padding:"9px 16px",borderRadius:20,border:"none",background:"#444",color:TEXT,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}} onClick={()=>addComment(p.id,commentInputs[p.id]||"")}>전송</button>
+                    <button style={{padding:"9px 16px",borderRadius:20,border:"none",background:"#444",color:"#fff",fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}} onClick={()=>addComment(p.id,commentInputs[p.id]||"")}>전송</button>
                   </div>
                 </div>
               </div>
@@ -332,7 +356,7 @@ function App(){
           }
         </div>
         {calEditModal&&(
-          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center"}}>
             <div style={{background:CARD_BG,borderRadius:20,padding:24,width:280,fontFamily:FONT}}>
               <div style={{fontWeight:700,fontSize:16,marginBottom:12,color:TEXT}}>제목 수정</div>
               <input style={INP} maxLength={4} placeholder="4글자 이내로 입력해주세요" value={calTitleInput}
@@ -340,8 +364,8 @@ function App(){
                 onKeyDown={e=>{if(calTitleInput.length>=4&&!["Backspace","Delete","ArrowLeft","ArrowRight"].includes(e.key))e.preventDefault();}}/>
               <div style={{fontSize:11,color:SUB,marginBottom:12}}>{calTitleInput.length}/4</div>
               <div style={{display:"flex",gap:8}}>
-                <button style={{...BTN("#333",TEXT),flex:1}} onClick={()=>setCalEditModal(null)}>취소</button>
-                <button style={{...BTN(AC),flex:1}} onClick={()=>{setCalTitles(p=>({...p,[calEditModal]:calTitleInput.trim()}));setCalEditModal(null);}}>저장</button>
+                <button style={{...BTN("#eee","#666"),flex:1}} onClick={()=>setCalEditModal(null)}>취소</button>
+                <button style={{...BTN(AC),flex:1}} onClick={()=>{saveCalTitle(calEditModal,calTitleInput.trim());setCalEditModal(null);}}>저장</button>
               </div>
             </div>
           </div>
@@ -352,37 +376,33 @@ function App(){
 
   return(
     <div style={{minHeight:"100vh",background:BG,color:TEXT,fontFamily:FONT,maxWidth:393,margin:"0 auto"}}>
-      {/* Header */}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"52px 20px 14px",background:CARD_BG,borderBottom:`1px solid ${BORDER}`}}>
-        <span style={{fontWeight:900,fontSize:24,color:AC,letterSpacing:3,fontFamily:JALNAN}}>DAYCLIK!</span>
+        <span style={{fontWeight:900,fontSize:24,color:"#1a1a1a",letterSpacing:3,fontFamily:JALNAN}}>DAYCLIK!</span>
         <span style={{background:L,color:AC,padding:"4px 12px",borderRadius:20,fontSize:11,fontWeight:700}}>#{groupCode}</span>
       </div>
 
-      {/* Tabs */}
       <div style={{display:"flex",background:CARD_BG,borderBottom:`1px solid ${BORDER}`,position:"sticky",top:0,zIndex:10}}>
         {MAIN_TABS.map((t,i)=>(
-          <button key={i} style={{flex:1,padding:"13px 4px",border:"none",background:"transparent",color:mainTab===i?AC:SUB,fontSize:13,cursor:"pointer",fontFamily:FONT,fontWeight:mainTab===i?700:500,borderBottom:mainTab===i?`2.5px solid ${AC}`:"none"}}
+          <button key={i} style={{flex:1,padding:"13px 4px",border:"none",background:"transparent",color:mainTab===i?AC:SUB,fontSize:13,cursor:"pointer",fontWeight:mainTab===i?700:500,borderBottom:mainTab===i?`2.5px solid ${AC}`:"none"}}
             onClick={()=>{setMainTab(i);setSettingsPage(null);}}>{t}</button>
         ))}
       </div>
 
       <div style={{padding:"16px 16px 0"}}>
 
-        {/* CHALLENGE */}
         {mainTab===0&&<>
           <div style={{background:PS,borderRadius:22,padding:"20px",marginBottom:14}}>
-            <div style={{color:getTextColor(PS)==="#111"?"#333":AC,fontSize:11,fontWeight:700,letterSpacing:1,marginBottom:8,textTransform:"uppercase"}}>지금의 챌린지</div>
+            <div style={{color:"#555",fontSize:11,fontWeight:700,letterSpacing:1,marginBottom:8,textTransform:"uppercase"}}>지금의 챌린지</div>
             <div style={{fontSize:17,fontWeight:700,lineHeight:1.6,color:"#111",marginBottom:18}}>{cur}</div>
             {hasPhoto?<div style={{color:"#26a69a",fontWeight:700,fontSize:15}}>완료! 다음 챌린지를 기다려요</div>
-              :expired?<div style={{color:"#ef9a9a",fontWeight:700,fontSize:15}}>시간이 초과됐어요</div>
+              :expired?<div style={{color:"#e57373",fontWeight:700,fontSize:15}}>시간이 초과됐어요</div>
               :<button style={{width:"100%",padding:"14px",borderRadius:16,border:"none",background:AC,color:TC,fontWeight:700,fontSize:16,cursor:"pointer"}} onClick={()=>{if(!hasPhoto){setStarted(true);setTimeLeft(60);setExpired(false);openCamera();}}}>챌린지 시작하기</button>
             }
           </div>
-
           <div style={{background:PS,borderRadius:22,padding:"20px 20px 8px",marginBottom:20}}>
-            <div style={{fontWeight:700,fontSize:13,color:getTextColor(PS)==="#111"?"#333":AC,marginBottom:12,letterSpacing:1,textTransform:"uppercase"}}>Today's Feed</div>
+            <div style={{fontWeight:700,fontSize:13,color:"#555",marginBottom:12,letterSpacing:1,textTransform:"uppercase"}}>Today's Feed</div>
             {todayPhotos.length===0
-              ?<div style={{textAlign:"center",color:"#555",padding:"24px 0 16px",fontSize:14}}>아직 사진이 없어요</div>
+              ?<div style={{textAlign:"center",color:"#aaa",padding:"24px 0 16px",fontSize:14}}>아직 사진이 없어요</div>
               :todayPhotos.map(p=>(
                 <div key={p.id} style={{background:CARD_BG,borderRadius:18,overflow:"hidden",marginBottom:12,border:`1px solid ${BORDER}`}}>
                   <div style={{padding:"12px 14px 8px",display:"flex",alignItems:"center",gap:10}}>
@@ -395,10 +415,10 @@ function App(){
                   <div style={{padding:"10px 14px 14px"}}>
                     {(p.comments||[]).map((c,ci)=><div key={ci} style={{fontSize:13,color:SUB,marginBottom:6}}><b style={{color:AC}}>{c.user}</b>  {c.text}</div>)}
                     <div style={{display:"flex",gap:8,marginTop:8}}>
-                      <input style={{flex:1,padding:"9px 14px",borderRadius:20,border:`1.5px solid ${BORDER}`,background:"#222",color:TEXT,fontSize:13,outline:"none"}} placeholder="댓글 달기"
+                      <input style={{flex:1,padding:"9px 14px",borderRadius:20,border:`1.5px solid ${BORDER}`,background:"#f9f9f9",color:TEXT,fontSize:13,outline:"none"}} placeholder="댓글 달기"
                         value={commentInputs[p.id]||""} onChange={e=>setCommentInputs(pr=>({...pr,[p.id]:e.target.value}))}
                         onKeyDown={e=>e.key==="Enter"&&addComment(p.id,commentInputs[p.id]||"")}/>
-                      <button style={{padding:"9px 16px",borderRadius:20,border:"none",background:"#444",color:TEXT,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}} onClick={()=>addComment(p.id,commentInputs[p.id]||"")}>전송</button>
+                      <button style={{padding:"9px 16px",borderRadius:20,border:"none",background:"#444",color:"#fff",fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}} onClick={()=>addComment(p.id,commentInputs[p.id]||"")}>전송</button>
                     </div>
                   </div>
                 </div>
@@ -407,12 +427,11 @@ function App(){
           </div>
         </>}
 
-        {/* CALENDAR */}
         {mainTab===1&&<>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-            <button style={{background:"none",border:`1.5px solid ${BORDER}`,color:AC,fontSize:20,cursor:"pointer",padding:"4px 14px",borderRadius:12}} onClick={()=>setCalDate(d=>new Date(d.getFullYear(),d.getMonth()-1,1))}>‹</button>
+            <button style={{background:"none",border:`1.5px solid ${BORDER}`,color:"#1a1a1a",fontSize:20,cursor:"pointer",padding:"4px 14px",borderRadius:12}} onClick={()=>setCalDate(d=>new Date(d.getFullYear(),d.getMonth()-1,1))}>‹</button>
             <span style={{fontWeight:800,fontSize:18,color:TEXT}}>{calDate.getFullYear()}.{String(calDate.getMonth()+1).padStart(2,'0')}</span>
-            <button style={{background:"none",border:`1.5px solid ${BORDER}`,color:AC,fontSize:20,cursor:"pointer",padding:"4px 14px",borderRadius:12}} onClick={()=>setCalDate(d=>new Date(d.getFullYear(),d.getMonth()+1,1))}>›</button>
+            <button style={{background:"none",border:`1.5px solid ${BORDER}`,color:"#1a1a1a",fontSize:20,cursor:"pointer",padding:"4px 14px",borderRadius:12}} onClick={()=>setCalDate(d=>new Date(d.getFullYear(),d.getMonth()+1,1))}>›</button>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3,marginBottom:8}}>
             {CAL_DAYS.map((d,i)=><div key={i} style={{textAlign:"center",fontSize:9,color:SUB,padding:"4px 0",fontWeight:600}}>{d}</div>)}
@@ -421,18 +440,18 @@ function App(){
               const day=i+1,dk=getDateKey(new Date(calDate.getFullYear(),calDate.getMonth(),day));
               const dp=fsPhotos.filter(p=>p.dateKey===dk),isToday=dk===today,title=calTitles[dk]||"",hasTitle=!!title,hasP=dp.length>0;
               return(
-                <div key={day} style={{minHeight:72,background:hasP?L:(hasTitle?lighten(AC,0.08):CARD_BG),borderRadius:10,padding:4,border:`1.5px solid ${isToday?AC:BORDER}`,overflow:"hidden",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-start"}}
+                <div key={day} style={{minHeight:72,background:hasP?L:CARD_BG,borderRadius:10,padding:4,border:`1.5px solid ${isToday?AC:BORDER}`,overflow:"hidden",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center"}}
                   onClick={()=>{if(hasP||hasTitle)setCalDetailDay(dk);else{setCalTitleInput("");setCalTitleModal(dk);}}}>
                   <div style={{fontSize:10,color:SUB,alignSelf:"flex-start",marginBottom:2}}>{day}</div>
                   {hasP&&<img src={dp[0].url} alt="" style={{width:"100%",borderRadius:6,objectFit:"cover",height:32}}/>}
                   {hasTitle&&<div style={{fontSize:9,fontWeight:700,color:AC,textAlign:"center",whiteSpace:"nowrap",overflow:"hidden",maxWidth:"100%",padding:"2px",marginTop:hasP?2:0}}>{title}</div>}
-                  {!hasP&&!hasTitle&&<div style={{fontSize:20,color:"#333",lineHeight:1,marginTop:6}}>+</div>}
+                  {!hasP&&!hasTitle&&<div style={{fontSize:20,color:"#ccc",lineHeight:1,marginTop:6}}>+</div>}
                 </div>
               );
             })}
           </div>
           {calTitleModal&&(
-            <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center"}}>
               <div style={{background:CARD_BG,borderRadius:20,padding:24,width:280,fontFamily:FONT}}>
                 <div style={{fontWeight:700,fontSize:16,marginBottom:4,color:TEXT}}>날짜 제목 추가</div>
                 <div style={{fontSize:12,color:SUB,marginBottom:14}}>{calTitleModal}</div>
@@ -441,36 +460,34 @@ function App(){
                   onKeyDown={e=>{if(calTitleInput.length>=4&&!["Backspace","Delete","ArrowLeft","ArrowRight"].includes(e.key))e.preventDefault();}}/>
                 <div style={{fontSize:11,color:SUB,marginBottom:12}}>{calTitleInput.length}/4</div>
                 <div style={{display:"flex",gap:8}}>
-                  <button style={{...BTN("#333",TEXT),flex:1}} onClick={()=>setCalTitleModal(null)}>취소</button>
-                  <button style={{...BTN(AC),flex:1}} onClick={()=>{if(calTitleInput.trim()){setCalTitles(p=>({...p,[calTitleModal]:calTitleInput.trim()}));setCalTitleModal(null);}}}>저장</button>
+                  <button style={{...BTN("#eee","#666"),flex:1}} onClick={()=>setCalTitleModal(null)}>취소</button>
+                  <button style={{...BTN(AC),flex:1}} onClick={()=>{if(calTitleInput.trim()){saveCalTitle(calTitleModal,calTitleInput.trim());setCalTitleModal(null);}}}>저장</button>
                 </div>
               </div>
             </div>
           )}
         </>}
 
-        {/* SETTINGS */}
         {mainTab===2&&<>
           {settingsPage===null&&(
             <div style={{background:CARD_BG,borderRadius:20,overflow:"hidden",border:`1px solid ${BORDER}`}}>
               {["프로필","친구 목록","챌린지 설정","테마 색상"].map((item,i,arr)=>(
                 <button key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",padding:"18px 20px",border:"none",background:"transparent",borderBottom:i<arr.length-1?`1px solid ${BORDER}`:"none",cursor:"pointer",fontSize:15,color:TEXT,fontWeight:500,textAlign:"left"}}
-                  onClick={()=>setSettingsPage(i)}><span>{item}</span><span style={{color:"#444",fontSize:18}}>›</span></button>
+                  onClick={()=>setSettingsPage(i)}><span>{item}</span><span style={{color:"#ccc",fontSize:18}}>›</span></button>
               ))}
             </div>
           )}
 
-          {/* 프로필 */}
           {settingsPage===0&&(
             <div>
-              <button style={{background:"none",border:"none",color:AC,fontSize:15,cursor:"pointer",fontWeight:700,marginBottom:16,padding:0}} onClick={()=>setSettingsPage(null)}>← 뒤로</button>
+              <button style={{background:"none",border:"none",color:"#1a1a1a",fontSize:15,cursor:"pointer",fontWeight:700,marginBottom:16,padding:0}} onClick={()=>setSettingsPage(null)}>← 뒤로</button>
               <div style={{background:CARD_BG,borderRadius:20,padding:24,border:`1px solid ${BORDER}`}}>
                 <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:12,marginBottom:20}}>
                   <div style={{width:88,height:88,borderRadius:22,background:L,border:`3px solid ${AC}`,overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}} onClick={()=>profileFileRef.current?.click()}>
                     {profileImg?<img src={profileImg} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span style={{fontSize:32,color:AC}}>+</span>}
                   </div>
                   <input ref={profileFileRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{const f=e.target.files[0];if(f){const r=new FileReader();r.onload=ev=>setProfileImg(ev.target.result);r.readAsDataURL(f);}}}/>
-                  <button style={{fontSize:12,color:AC,background:"none",border:`1px solid ${BORDER}`,borderRadius:10,padding:"5px 14px",cursor:"pointer"}} onClick={()=>profileFileRef.current?.click()}>프로필 사진 변경</button>
+                  <button style={{fontSize:12,color:"#1a1a1a",background:"none",border:`1px solid ${BORDER}`,borderRadius:10,padding:"5px 14px",cursor:"pointer"}} onClick={()=>profileFileRef.current?.click()}>프로필 사진 변경</button>
                 </div>
                 <div style={{marginBottom:8,fontWeight:600,fontSize:13,color:SUB}}>닉네임</div>
                 <input style={INP} value={profileNameEdit||userName} onChange={e=>setProfileNameEdit(e.target.value)}/>
@@ -479,15 +496,14 @@ function App(){
             </div>
           )}
 
-          {/* 친구 목록 */}
           {settingsPage===1&&(
             <div>
-              <button style={{background:"none",border:"none",color:AC,fontSize:15,cursor:"pointer",fontWeight:700,marginBottom:16,padding:0}} onClick={()=>setSettingsPage(null)}>← 뒤로</button>
+              <button style={{background:"none",border:"none",color:"#1a1a1a",fontSize:15,cursor:"pointer",fontWeight:700,marginBottom:16,padding:0}} onClick={()=>setSettingsPage(null)}>← 뒤로</button>
               <div style={{background:CARD_BG,borderRadius:18,padding:18,marginBottom:14,border:`1px solid ${BORDER}`}}>
                 <div style={{fontWeight:700,fontSize:14,marginBottom:8,color:TEXT}}>내 그룹 코드</div>
                 <div style={{display:"flex",alignItems:"center",gap:10}}>
-                  <div style={{flex:1,padding:"12px 16px",borderRadius:13,background:"#222",fontSize:18,fontWeight:900,color:AC,letterSpacing:4,textAlign:"center"}}>{groupCode}</div>
-                  <button style={{padding:"12px 16px",borderRadius:13,border:"none",background:AC,color:TC,fontWeight:700,cursor:"pointer",fontSize:13}} onClick={()=>share(groupCode)}>공유</button>
+                  <div style={{flex:1,padding:"12px 16px",borderRadius:13,background:"#f4f5f7",fontSize:18,fontWeight:900,color:"#1a1a1a",letterSpacing:4,textAlign:"center"}}>{groupCode}</div>
+                  <button style={{padding:"12px 16px",borderRadius:13,border:"none",background:"#1a1a1a",color:"#fff",fontWeight:700,cursor:"pointer",fontSize:13}} onClick={()=>share(groupCode)}>공유</button>
                 </div>
               </div>
               <div style={{background:CARD_BG,borderRadius:18,padding:18,border:`1px solid ${BORDER}`}}>
@@ -507,36 +523,34 @@ function App(){
             </div>
           )}
 
-          {/* 챌린지 설정 */}
           {settingsPage===2&&(
             <div>
-              <button style={{background:"none",border:"none",color:AC,fontSize:15,cursor:"pointer",fontWeight:700,marginBottom:16,padding:0}} onClick={()=>setSettingsPage(null)}>← 뒤로</button>
+              <button style={{background:"none",border:"none",color:"#1a1a1a",fontSize:15,cursor:"pointer",fontWeight:700,marginBottom:16,padding:0}} onClick={()=>setSettingsPage(null)}>← 뒤로</button>
               <div style={{background:CARD_BG,borderRadius:18,padding:18,marginBottom:14,border:`1px solid ${BORDER}`}}>
                 <div style={{fontWeight:700,fontSize:14,marginBottom:12,color:TEXT}}>챌린지 추가</div>
                 <input style={INP} placeholder="주제 입력" value={newChallenge} onChange={e=>setNewChallenge(e.target.value)}/>
-                <button style={BTN(AC)} onClick={()=>{if(newChallenge.trim()){setChallenges(p=>[...p,newChallenge.trim()]);setNewChallenge("");}}}>추가하기</button>
+                <button style={BTN(AC)} onClick={()=>{if(newChallenge.trim()){saveChallenges([...challenges,newChallenge.trim()]);setNewChallenge("");}}}>추가하기</button>
                 <button style={{...BTN("#9b8ec4"),marginTop:8}} onClick={generateAi} disabled={aiLoading}>{aiLoading?"생성 중...":"AI로 챌린지 10개 생성"}</button>
               </div>
               <div style={{fontWeight:700,fontSize:12,color:SUB,marginBottom:10,letterSpacing:1,textTransform:"uppercase"}}>전체 ({challenges.length}개)</div>
               {challenges.map((c,i)=>(
                 <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:CARD_BG,borderRadius:14,padding:"13px 16px",marginBottom:8,border:`1px solid ${BORDER}`}}>
                   <span style={{fontSize:13,flex:1,lineHeight:1.5,color:TEXT}}>{c}</span>
-                  {i>=DEFAULT_CHALLENGES.length&&<button style={{background:"#3a1a1a",border:"none",color:"#e57373",borderRadius:8,padding:"4px 10px",cursor:"pointer",marginLeft:8,fontWeight:700}} onClick={()=>setChallenges(p=>p.filter((_,j)=>j!==i))}>삭제</button>}
+                  {i>=DEFAULT_CHALLENGES.length&&<button style={{background:"#fff0f0",border:"none",color:"#e57373",borderRadius:8,padding:"4px 10px",cursor:"pointer",marginLeft:8,fontWeight:700}} onClick={()=>saveChallenges(challenges.filter((_,j)=>j!==i))}>삭제</button>}
                 </div>
               ))}
             </div>
           )}
 
-          {/* 테마 색상 */}
           {settingsPage===3&&(
             <div>
-              <button style={{background:"none",border:"none",color:AC,fontSize:15,cursor:"pointer",fontWeight:700,marginBottom:16,padding:0}} onClick={()=>setSettingsPage(null)}>← 뒤로</button>
+              <button style={{background:"none",border:"none",color:"#1a1a1a",fontSize:15,cursor:"pointer",fontWeight:700,marginBottom:16,padding:0}} onClick={()=>setSettingsPage(null)}>← 뒤로</button>
               <div style={{background:CARD_BG,borderRadius:20,padding:24,border:`1px solid ${BORDER}`}}>
                 <div style={{fontWeight:700,fontSize:15,marginBottom:14,color:TEXT}}>테마 색상 선택</div>
                 <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:20}}>
                   {[...PRESET_COLORS,...customColors].map((c,i)=>(
                     <div key={i} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:5,cursor:"pointer"}} onClick={()=>setAccent(c.value)}>
-                      <div style={{width:"100%",aspectRatio:"1",borderRadius:14,background:c.value,boxShadow:AC===c.value?`0 0 0 3px #111,0 0 0 5px ${c.value}`:"none",transition:"all .15s"}}/>
+                      <div style={{width:"100%",aspectRatio:"1",borderRadius:14,background:c.value,boxShadow:AC===c.value?`0 0 0 3px #fff,0 0 0 5px ${c.value}`:"none",transition:"all .15s"}}/>
                       <span style={{fontSize:10,color:SUB,fontWeight:AC===c.value?700:400,textAlign:"center"}}>{c.name}</span>
                     </div>
                   ))}
