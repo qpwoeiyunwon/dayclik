@@ -15,6 +15,8 @@
     body{background:#f4f5f7;font-family:'Apple SD Gothic Neo','AppleSDGothicNeo',sans-serif;}
     input,button{font-family:inherit;min-width:0;}
     ::-webkit-scrollbar{display:none;}
+    input[type=range]{-webkit-appearance:none;appearance:none;height:2px;border-radius:2px;outline:none;cursor:pointer;}
+    input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:#fff;cursor:pointer;}
   </style>
 </head>
 <body>
@@ -37,7 +39,8 @@ const CLD_CLOUD="duahjg6jf",CLD_PRESET="claude";
 async function uploadImg(dataUrl){
   const blob=await(await fetch(dataUrl)).blob();
   const form=new FormData();
-  form.append("file",blob);form.append("upload_preset",CLD_PRESET);
+  form.append("file",blob);
+  form.append("upload_preset",CLD_PRESET);
   const res=await fetch(`https://api.cloudinary.com/v1_1/${CLD_CLOUD}/image/upload`,{method:"POST",body:form});
   return(await res.json()).secure_url;
 }
@@ -62,10 +65,22 @@ const PRESET_COLORS=[
   {name:"로즈",value:"#f48fb1"},{name:"골드",value:"#ffd54f"},
 ];
 
+const FILTERS=[
+  {name:"없음",css:(i)=>"none"},
+  {name:"흑백",css:(i)=>`grayscale(${i}%)`},
+  {name:"빈티지",css:(i)=>`sepia(${i*0.6}%) contrast(${1+i*0.001})`},
+  {name:"선명",css:(i)=>`saturate(${100+i*0.8}%) contrast(${1+i*0.001})`},
+  {name:"밝게",css:(i)=>`brightness(${1+i*0.003})`},
+  {name:"어둡게",css:(i)=>`brightness(${1-i*0.003})`},
+  {name:"차갑게",css:(i)=>`hue-rotate(${i*1.8}deg)`},
+  {name:"따뜻하게",css:(i)=>`sepia(${i*0.3}%)`},
+];
+
 const MAIN_TABS=["Challenge","Calendar","Settings"];
 const CAL_DAYS=["SUN","MON","TUE","WED","THU","FRI","SAT"];
 const JALNAN="'여기어때 잘난체','Apple SD Gothic Neo',sans-serif";
 const FONT="'Apple SD Gothic Neo','AppleSDGothicNeo',sans-serif";
+const BG="#f4f5f7",CARD_BG="#fff",BORDER="#e0e0e0",TEXT="#1a1a1a",SUB="#888";
 
 function getTextColor(hex){
   const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
@@ -85,41 +100,15 @@ function getDateKey(d=new Date()){return`${d.getFullYear()}-${String(d.getMonth(
 function pickChallenge(chs,hk){let h=0;for(let c of hk)h=(h*31+c.charCodeAt(0))%chs.length;return chs[Math.abs(h)%chs.length];}
 function getDIM(y,m){return new Date(y,m+1,0).getDate();}
 function getFD(y,m){return new Date(y,m,1).getDay();}
-function saveCache(key,val){try{localStorage.setItem("dayclik_"+key,JSON.stringify(val));}catch{}}
-function loadCache(key,def){try{const v=localStorage.getItem("dayclik_"+key);return v?JSON.parse(v):def;}catch{return def;}}
+function saveCache(k,v){try{localStorage.setItem("dayclik_"+k,JSON.stringify(v));}catch{}}
+function loadCache(k,def){try{const v=localStorage.getItem("dayclik_"+k);return v?JSON.parse(v):def;}catch{return def;}}
 
-// 댓글 입력+전송 컴포넌트
 function CommentRow({value,onChange,onSend}){
   return(
     <div style={{display:"flex",gap:6,marginTop:8,width:"100%"}}>
-      <input
-        style={{flex:1,minWidth:0,padding:"9px 12px",borderRadius:20,border:"1.5px solid #e0e0e0",background:"#f9f9f9",color:"#1a1a1a",fontSize:13,outline:"none"}}
-        placeholder="댓글 달기"
-        value={value}
-        onChange={onChange}
-        onKeyDown={e=>e.key==="Enter"&&onSend()}
-      />
-      <button
-        style={{flexShrink:0,padding:"9px 14px",borderRadius:20,border:"none",background:"#444",color:"#fff",fontWeight:700,cursor:"pointer",fontSize:13,whiteSpace:"nowrap"}}
-        onClick={onSend}>전송</button>
-    </div>
-  );
-}
-
-// 댓글 입력+전송 컴포넌트 (App 밖에 선언)
-function CommentRow({value,onChange,onSend}){
-  return(
-    <div style={{display:"flex",gap:6,marginTop:8,width:"100%"}}>
-      <input
-        style={{flex:1,minWidth:0,padding:"9px 12px",borderRadius:20,border:"1.5px solid #e0e0e0",background:"#f9f9f9",color:"#1a1a1a",fontSize:13,outline:"none"}}
-        placeholder="댓글 달기"
-        value={value}
-        onChange={onChange}
-        onKeyDown={e=>e.key==="Enter"&&onSend()}
-      />
-      <button
-        style={{flexShrink:0,padding:"9px 14px",borderRadius:20,border:"none",background:"#444",color:"#fff",fontWeight:700,cursor:"pointer",fontSize:13,whiteSpace:"nowrap"}}
-        onClick={onSend}>전송</button>
+      <input style={{flex:1,minWidth:0,padding:"9px 12px",borderRadius:20,border:`1.5px solid ${BORDER}`,background:"#f9f9f9",color:TEXT,fontSize:13,outline:"none"}}
+        placeholder="댓글 달기" value={value} onChange={onChange} onKeyDown={e=>e.key==="Enter"&&onSend()}/>
+      <button style={{flexShrink:0,padding:"9px 14px",borderRadius:20,border:"none",background:"#444",color:"#fff",fontWeight:700,cursor:"pointer",fontSize:13,whiteSpace:"nowrap"}} onClick={onSend}>전송</button>
     </div>
   );
 }
@@ -133,8 +122,8 @@ function App(){
   const [challenges,setChallenges]=useState(DEFAULT_CHALLENGES);
   const [newChallenge,setNewChallenge]=useState("");
   const [hourKey,setHourKey]=useState(getHourKey());
-  const [started,setStarted]=useState(false);
   const [timeLeft,setTimeLeft]=useState(60);
+  const [started,setStarted]=useState(false);
   const [expired,setExpired]=useState(false);
   const [fsPhotos,setFsPhotos]=useState([]);
   const [members,setMembers]=useState([]);
@@ -145,6 +134,7 @@ function App(){
   const [userName,setUserName]=useState(()=>loadCache("userName",""));
   const [nameInput,setNameInput]=useState("");
   const [cameraActive,setCameraActive]=useState(false);
+  const [facingMode,setFacingMode]=useState("environment");
   const [filterIdx,setFilterIdx]=useState(0);
   const [filterIntensity,setFilterIntensity]=useState(100);
   const [accent,setAccent]=useState(()=>loadCache("accent","#555555"));
@@ -161,15 +151,7 @@ function App(){
 
   const videoRef=useRef(),canvasRef=useRef(),streamRef=useRef(),timerRef=useRef(),profileFileRef=useRef();
   const today=getDateKey();
-  const AC=accent;
-  const TC=getTextColor(accent);
-  const L=lighten(accent,0.18);
-  const PS=pastel(accent);
-  const BG="#f4f5f7";
-  const CARD_BG="#ffffff";
-  const BORDER="#e0e0e0";
-  const TEXT="#1a1a1a";
-  const SUB="#888888";
+  const AC=accent,TC=getTextColor(accent),L=lighten(accent,0.18),PS=pastel(accent);
   const cur=pickChallenge(challenges,hourKey);
 
   useEffect(()=>saveCache("groupCode",groupCode),[groupCode]);
@@ -201,9 +183,7 @@ function App(){
   useEffect(()=>{
     if(!groupCode||!joined)return;
     return db.collection("groups").doc(groupCode).collection("settings").doc("challenges")
-      .onSnapshot(snap=>{
-        if(snap.exists){const d=snap.data().list;if(d&&d.length>0)setChallenges(d);}
-      });
+      .onSnapshot(snap=>{if(snap.exists){const d=snap.data().list;if(d&&d.length>0)setChallenges(d);}});
   },[groupCode,joined]);
 
   useEffect(()=>{
@@ -232,11 +212,16 @@ function App(){
 
   async function openCamera(facing="environment"){
     try{
-      if(streamRef.current){streamRef.current.getTracks().forEach(t=>t.stop());}
+      if(streamRef.current)streamRef.current.getTracks().forEach(t=>t.stop());
       const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:facing},audio:false});
       streamRef.current=stream;setCameraActive(true);setTimeLeft(60);
       setTimeout(()=>{if(videoRef.current){videoRef.current.srcObject=stream;videoRef.current.play();}},80);
     }catch{alert("카메라 접근 권한이 필요합니다.");setStarted(false);}
+  }
+
+  function stopCamera(){
+    if(streamRef.current){streamRef.current.getTracks().forEach(t=>t.stop());streamRef.current=null;}
+    setCameraActive(false);
   }
 
   async function switchCamera(){
@@ -245,10 +230,9 @@ function App(){
     await openCamera(next);
   }
 
-  function stopCamera(){if(streamRef.current){streamRef.current.getTracks().forEach(t=>t.stop());streamRef.current=null;}setCameraActive(false);}
-
   async function capturePhoto(){
-    const video=videoRef.current,canvas=canvasRef.current;if(!video||!canvas)return;
+    const video=videoRef.current,canvas=canvasRef.current;
+    if(!video||!canvas)return;
     canvas.width=video.videoWidth;canvas.height=video.videoHeight;
     const ctx=canvas.getContext("2d");
     if(facingMode==="user"){ctx.translate(canvas.width,0);ctx.scale(-1,1);}
@@ -296,103 +280,85 @@ function App(){
     setAiLoading(false);
   }
 
-  function share(code){const msg=`DAYCLIK! 그룹 코드: ${code}`;navigator.clipboard?.writeText(msg).catch(()=>{});alert(`클립보드에 복사됐어요:\n${msg}`);}
+  function share(code){
+    const msg=`DAYCLIK! 그룹 코드: ${code}`;
+    navigator.clipboard?.writeText(msg).catch(()=>{});
+    alert(`클립보드에 복사됐어요:\n${msg}`);
+  }
 
-  const INP={width:"100%",padding:"11px 15px",borderRadius:13,border:`1.5px solid ${BORDER}`,background:"#f9f9f9",color:TEXT,fontSize:14,marginBottom:10,boxSizing:"border-box",fontFamily:FONT,outline:"none"};
-  const BTN=(bg,col)=>({width:"100%",padding:"13px",borderRadius:14,border:"none",background:bg,color:col||getTextColor(bg),fontWeight:700,fontSize:15,cursor:"pointer",fontFamily:FONT});
+  const INP={width:"100%",padding:"11px 15px",borderRadius:13,border:`1.5px solid ${BORDER}`,background:"#f9f9f9",color:TEXT,fontSize:14,marginBottom:10,boxSizing:"border-box",outline:"none"};
+  const BTN=(bg,col)=>({width:"100%",padding:"13px",borderRadius:14,border:"none",background:bg,color:col||getTextColor(bg),fontWeight:700,fontSize:15,cursor:"pointer"});
 
   // 닉네임
   if(!userName) return(
-    <div style={{minHeight:"100vh",background:BG,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 20px",fontFamily:FONT}}>
+    <div style={{minHeight:"100vh",background:BG,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 20px"}}>
       <div style={{background:CARD_BG,borderRadius:28,padding:"36px 28px",width:"100%",maxWidth:340,textAlign:"center",boxShadow:"0 8px 32px rgba(0,0,0,0.08)"}}>
         <div style={{fontWeight:900,fontSize:32,color:"#1a1a1a",letterSpacing:3,marginBottom:6,fontFamily:JALNAN}}>DAYCLIK!</div>
         <div style={{color:SUB,fontSize:13,marginBottom:24}}>매시간 새로운 사진 미션</div>
         <input style={INP} placeholder="닉네임 입력" value={nameInput} onChange={e=>setNameInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&nameInput.trim()&&setUserName(nameInput.trim())}/>
-        <button style={{width:"100%",padding:"13px",borderRadius:14,border:"none",background:"#1a1a1a",color:"#fff",fontWeight:700,fontSize:15,cursor:"pointer"}} onClick={()=>nameInput.trim()&&setUserName(nameInput.trim())}>시작하기</button>
+        <button style={{...BTN("#1a1a1a","#fff")}} onClick={()=>nameInput.trim()&&setUserName(nameInput.trim())}>시작하기</button>
       </div>
     </div>
   );
 
   // 그룹
   if(!joined) return(
-    <div style={{minHeight:"100vh",background:BG,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 20px",fontFamily:FONT}}>
+    <div style={{minHeight:"100vh",background:BG,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 20px"}}>
       <div style={{background:CARD_BG,borderRadius:28,padding:"36px 28px",width:"100%",maxWidth:340,textAlign:"center",boxShadow:"0 8px 32px rgba(0,0,0,0.08)"}}>
         <div style={{fontWeight:900,fontSize:28,color:"#1a1a1a",letterSpacing:3,marginBottom:4,fontFamily:JALNAN}}>DAYCLIK!</div>
         <div style={{color:SUB,fontSize:13,marginBottom:24}}>코드로 친구와 함께해요</div>
-        <button style={{width:"100%",padding:"13px",borderRadius:14,border:"none",background:"#1a1a1a",color:"#fff",fontWeight:700,fontSize:15,cursor:"pointer",marginBottom:10}} onClick={()=>{const c=genCode();setGroupCode(c);setJoined(true);}}>새 그룹 만들기</button>
+        <button style={{...BTN("#1a1a1a","#fff"),marginBottom:10}} onClick={()=>{setGroupCode(genCode());setJoined(true);}}>새 그룹 만들기</button>
         <div style={{color:"#ccc",fontSize:12,margin:"4px 0 10px"}}>또는</div>
         <input style={INP} placeholder="그룹 코드 입력" value={inputCode} onChange={e=>setInputCode(e.target.value.toUpperCase())}/>
-        <button style={{width:"100%",padding:"13px",borderRadius:14,border:"none",background:"#555",color:"#fff",fontWeight:700,fontSize:15,cursor:"pointer"}} onClick={()=>{if(inputCode.trim()){setGroupCode(inputCode.trim());setJoined(true);}}}>코드로 참여하기</button>
+        <button style={BTN("#555","#fff")} onClick={()=>{if(inputCode.trim()){setGroupCode(inputCode.trim());setJoined(true);}}}>코드로 참여하기</button>
       </div>
     </div>
   );
 
   // 카메라
   if(cameraActive) return(
-    <div style={{position:"fixed",inset:0,background:"#000",zIndex:200,display:"flex",flexDirection:"column",fontFamily:FONT}}>
-      <video ref={videoRef}
-        style={{flex:1,width:"100%",objectFit:"cover",
-          filter:FILTERS[filterIdx].css(filterIntensity),
-          transform:facingMode==="user"?"scaleX(-1)":"none"
-        }}
-        playsInline muted autoPlay/>
+    <div style={{position:"fixed",inset:0,background:"#000",zIndex:200,display:"flex",flexDirection:"column"}}>
+      <video ref={videoRef} style={{flex:1,width:"100%",objectFit:"cover",filter:FILTERS[filterIdx].css(filterIntensity),transform:facingMode==="user"?"scaleX(-1)":"none"}} playsInline muted autoPlay/>
       <canvas ref={canvasRef} style={{display:"none"}}/>
-      {/* 카운트다운 */}
-      <div style={{position:"absolute",top:"35%",left:0,right:0,display:"flex",alignItems:"center",justifyContent:"center",pointerEvents:"none"}}>
+      <div style={{position:"absolute",top:"30%",left:0,right:0,display:"flex",alignItems:"center",justifyContent:"center",pointerEvents:"none"}}>
         <span style={{fontSize:120,fontWeight:900,color:"rgba(255,255,255,0.50)",fontFamily:JALNAN,lineHeight:1}}>{timeLeft}</span>
       </div>
-      {/* 하단 필터 + 버튼 영역 */}
       <div style={{position:"absolute",bottom:0,left:0,right:0,background:"rgba(0,0,0,0.75)"}}>
-        {/* 필터 리스트 */}
         <div style={{display:"flex",overflowX:"auto",padding:"14px 16px 8px",gap:12,scrollbarWidth:"none"}}>
           {FILTERS.map((f,i)=>(
-            <div key={i} onClick={()=>setFilterIdx(i)}
-              style={{display:"flex",flexDirection:"column",alignItems:"center",gap:6,cursor:"pointer",flexShrink:0}}>
-              <div style={{
-                width:54,height:54,borderRadius:12,
-                background:`linear-gradient(135deg,#333,#666)`,
-                border:filterIdx===i?"2px solid #fff":"2px solid transparent",
-                display:"flex",alignItems:"center",justifyContent:"center",
-                overflow:"hidden",position:"relative"
-              }}>
-                <div style={{
-                  width:"100%",height:"100%",
-                  background:"linear-gradient(135deg,#5a8,#38c,#f84)",
-                  filter:f.css(80),
-                  opacity:0.9
-                }}/>
+            <div key={i} onClick={()=>setFilterIdx(i)} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:6,cursor:"pointer",flexShrink:0}}>
+              <div style={{width:54,height:54,borderRadius:12,border:filterIdx===i?"2.5px solid #fff":"2.5px solid transparent",overflow:"hidden"}}>
+                <div style={{width:"100%",height:"100%",background:"linear-gradient(135deg,#5a8,#38c,#f84)",filter:f.css(80),imageRendering:"crisp-edges"}}/>
               </div>
-              <span style={{color:filterIdx===i?"#fff":"#aaa",fontSize:10,fontWeight:filterIdx===i?700:400,whiteSpace:"nowrap"}}>{f.name}</span>
+              <span style={{color:filterIdx===i?"#fff":"#999",fontSize:10,fontWeight:filterIdx===i?700:400,whiteSpace:"nowrap"}}>{f.name}</span>
             </div>
           ))}
         </div>
-        {/* 강도 슬라이더 */}
         {filterIdx!==0&&(
           <div style={{padding:"4px 20px 8px",display:"flex",alignItems:"center",gap:12}}>
             <span style={{color:"#aaa",fontSize:12,whiteSpace:"nowrap"}}>강도</span>
-            <input type="range" min={0} max={100} value={filterIntensity}
-              onChange={e=>setFilterIntensity(Number(e.target.value))}
-              style={{flex:1,accentColor:"#fff",height:2,appearance:"none",WebkitAppearance:"none",background:`linear-gradient(to right,#fff ${filterIntensity}%,rgba(255,255,255,0.3) ${filterIntensity}%)`,borderRadius:2,outline:"none",cursor:"pointer"}}/>
+            <input type="range" min={0} max={100} value={filterIntensity} onChange={e=>setFilterIntensity(Number(e.target.value))}
+              style={{flex:1,background:`linear-gradient(to right,#fff ${filterIntensity}%,rgba(255,255,255,0.3) ${filterIntensity}%)`,borderRadius:2}}/>
             <span style={{color:"#fff",fontSize:12,width:24,textAlign:"right"}}>{filterIntensity}</span>
           </div>
         )}
-        {/* 촬영 버튼 */}
         <div style={{display:"flex",alignItems:"center",paddingBottom:44,paddingTop:8}}>
           <div style={{flex:1}}/>
           <button onClick={capturePhoto} style={{width:76,height:76,borderRadius:"50%",background:"rgba(255,255,255,0.88)",border:"4px solid #fff",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",boxShadow:"0 4px 20px rgba(0,0,0,0.3)"}}>
             <div style={{width:58,height:58,borderRadius:"50%",background:"#fff",border:`3px solid ${AC}`}}/>
           </button>
           <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center"}}>
-            <button style={{background:"rgba(255,255,255,0.20)",border:"none",borderRadius:"50%",width:48,height:48,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}} onClick={switchCamera} dangerouslySetInnerHTML={{__html:'<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/><path d="M20.49 15a9 9 0 0 1-14.85 3.36L1 14"/></svg>'}}/>
+            <button onClick={switchCamera} style={{background:"rgba(255,255,255,0.20)",border:"none",borderRadius:"50%",width:48,height:48,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}
+              dangerouslySetInnerHTML={{__html:'<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/><path d="M20.49 15a9 9 0 0 1-14.85 3.36L1 14"/></svg>'}}/>
           </div>
         </div>
       </div>
     </div>
   );
 
-  // 업로드 중
+  // 업로드
   if(uploading) return(
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:200,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",fontFamily:FONT}}>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:200,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
       <div style={{color:"#fff",fontSize:18,fontWeight:700,marginBottom:12}}>사진 업로드 중...</div>
       <div style={{color:AC,fontSize:13}}>잠깐만 기다려주세요</div>
     </div>
@@ -403,7 +369,7 @@ function App(){
     const dp=fsPhotos.filter(p=>p.dateKey===calDetailDay);
     const title=calTitles[calDetailDay]||"";
     return(
-      <div style={{minHeight:"100vh",background:BG,maxWidth:430,margin:"0 auto",color:TEXT,fontFamily:FONT}}>
+      <div style={{minHeight:"100vh",background:BG,maxWidth:430,margin:"0 auto",color:TEXT}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"52px 16px 14px",background:CARD_BG,borderBottom:`1px solid ${BORDER}`}}>
           <button style={{background:"none",border:"none",color:"#1a1a1a",fontSize:16,cursor:"pointer",fontWeight:700}} onClick={()=>setCalDetailDay(null)}>뒤로</button>
           <span style={{fontWeight:800,fontSize:17,color:TEXT}}>{calDetailDay}{title&&` — ${title}`}</span>
@@ -423,11 +389,7 @@ function App(){
                 <img src={p.url} alt="" style={{width:"100%",objectFit:"cover",maxHeight:340}}/>
                 <div style={{padding:"10px 14px 14px"}}>
                   {(p.comments||[]).map((c,ci)=><div key={ci} style={{fontSize:13,color:SUB,marginBottom:6}}><b style={{color:AC}}>{c.user}</b>  {c.text}</div>)}
-                  <CommentRow
-                    value={commentInputs[p.id]||""}
-                    onChange={e=>setCommentInputs(pr=>({...pr,[p.id]:e.target.value}))}
-                    onSend={()=>addComment(p.id,commentInputs[p.id]||"")}
-                  />
+                  <CommentRow value={commentInputs[p.id]||""} onChange={e=>setCommentInputs(pr=>({...pr,[p.id]:e.target.value}))} onSend={()=>addComment(p.id,commentInputs[p.id]||"")}/>
                 </div>
               </div>
             ))
@@ -435,7 +397,7 @@ function App(){
         </div>
         {calEditModal&&(
           <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 20px"}}>
-            <div style={{background:CARD_BG,borderRadius:20,padding:24,width:"100%",maxWidth:300,fontFamily:FONT}}>
+            <div style={{background:CARD_BG,borderRadius:20,padding:24,width:"100%",maxWidth:300}}>
               <div style={{fontWeight:700,fontSize:16,marginBottom:12,color:TEXT}}>제목 수정</div>
               <input style={INP} maxLength={4} placeholder="4글자 이내로 입력해주세요" value={calTitleInput}
                 onChange={e=>{if(e.target.value.length<=4)setCalTitleInput(e.target.value);}}
@@ -453,12 +415,11 @@ function App(){
   }
 
   return(
-    <div style={{minHeight:"100vh",background:BG,color:TEXT,fontFamily:FONT,maxWidth:430,margin:"0 auto"}}>
+    <div style={{minHeight:"100vh",background:BG,color:TEXT,maxWidth:430,margin:"0 auto"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"52px 16px 14px",background:CARD_BG,borderBottom:`1px solid ${BORDER}`}}>
         <span style={{fontWeight:900,fontSize:24,color:"#1a1a1a",letterSpacing:3,fontFamily:JALNAN}}>DAYCLIK!</span>
         <span style={{background:L,color:AC,padding:"4px 12px",borderRadius:20,fontSize:11,fontWeight:700}}>#{groupCode}</span>
       </div>
-
       <div style={{display:"flex",background:CARD_BG,borderBottom:`1px solid ${BORDER}`,position:"sticky",top:0,zIndex:10}}>
         {MAIN_TABS.map((t,i)=>(
           <button key={i} style={{flex:1,padding:"13px 4px",border:"none",background:"transparent",color:mainTab===i?AC:SUB,fontSize:13,cursor:"pointer",fontWeight:mainTab===i?700:500,borderBottom:mainTab===i?`2.5px solid ${AC}`:"none"}}
@@ -468,13 +429,14 @@ function App(){
 
       <div style={{padding:"16px 16px 0"}}>
 
+        {/* CHALLENGE */}
         {mainTab===0&&<>
           <div style={{background:PS,borderRadius:22,padding:"20px",marginBottom:14}}>
             <div style={{color:"#555",fontSize:11,fontWeight:700,letterSpacing:1,marginBottom:8,textTransform:"uppercase"}}>지금의 챌린지</div>
             <div style={{fontSize:17,fontWeight:700,lineHeight:1.6,color:"#111",marginBottom:18}}>{cur}</div>
             {hasPhoto?<div style={{color:"#1a1a1a",fontWeight:700,fontSize:15}}>완료! 다음 챌린지를 기다려요</div>
               :expired?<div style={{color:"#e57373",fontWeight:700,fontSize:15}}>시간이 초과됐어요</div>
-              :<button style={{width:"100%",padding:"14px",borderRadius:16,border:"none",background:AC,color:TC,fontWeight:700,fontSize:16,cursor:"pointer"}} onClick={()=>{if(!hasPhoto){setStarted(true);setTimeLeft(60);setExpired(false);openCamera(facingMode);}}} >챌린지 시작하기</button>
+              :<button style={{...BTN(AC,TC),borderRadius:16,padding:"14px",fontSize:16}} onClick={()=>{if(!hasPhoto){setStarted(true);setTimeLeft(60);setExpired(false);openCamera(facingMode);}}} >챌린지 시작하기</button>
             }
           </div>
           <div style={{background:PS,borderRadius:22,padding:"20px 20px 8px",marginBottom:20}}>
@@ -492,11 +454,7 @@ function App(){
                   <img src={p.url} alt="" style={{width:"100%",objectFit:"cover",maxHeight:340}}/>
                   <div style={{padding:"10px 14px 14px"}}>
                     {(p.comments||[]).map((c,ci)=><div key={ci} style={{fontSize:13,color:SUB,marginBottom:6}}><b style={{color:AC}}>{c.user}</b>  {c.text}</div>)}
-                    <CommentRow
-                      value={commentInputs[p.id]||""}
-                      onChange={e=>setCommentInputs(pr=>({...pr,[p.id]:e.target.value}))}
-                      onSend={()=>addComment(p.id,commentInputs[p.id]||"")}
-                    />
+                    <CommentRow value={commentInputs[p.id]||""} onChange={e=>setCommentInputs(pr=>({...pr,[p.id]:e.target.value}))} onSend={()=>addComment(p.id,commentInputs[p.id]||"")}/>
                   </div>
                 </div>
               ))
@@ -504,6 +462,7 @@ function App(){
           </div>
         </>}
 
+        {/* CALENDAR */}
         {mainTab===1&&<>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
             <button style={{background:"none",border:`1.5px solid ${BORDER}`,color:"#1a1a1a",fontSize:20,cursor:"pointer",padding:"4px 14px",borderRadius:12}} onClick={()=>setCalDate(d=>new Date(d.getFullYear(),d.getMonth()-1,1))}>‹</button>
@@ -529,7 +488,7 @@ function App(){
           </div>
           {calTitleModal&&(
             <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 20px"}}>
-              <div style={{background:CARD_BG,borderRadius:20,padding:24,width:"100%",maxWidth:300,fontFamily:FONT}}>
+              <div style={{background:CARD_BG,borderRadius:20,padding:24,width:"100%",maxWidth:300}}>
                 <div style={{fontWeight:700,fontSize:16,marginBottom:4,color:TEXT}}>날짜 제목 추가</div>
                 <div style={{fontSize:12,color:SUB,marginBottom:14}}>{calTitleModal}</div>
                 <input style={INP} maxLength={4} placeholder="4글자 이내로 입력해주세요" value={calTitleInput}
@@ -545,6 +504,7 @@ function App(){
           )}
         </>}
 
+        {/* SETTINGS */}
         {mainTab===2&&<>
           {settingsPage===null&&(
             <div style={{background:CARD_BG,borderRadius:20,overflow:"hidden",border:`1px solid ${BORDER}`}}>
@@ -554,7 +514,6 @@ function App(){
               ))}
             </div>
           )}
-
           {settingsPage===0&&(
             <div>
               <button style={{background:"none",border:"none",color:"#1a1a1a",fontSize:15,cursor:"pointer",fontWeight:700,marginBottom:16,padding:0}} onClick={()=>setSettingsPage(null)}>← 뒤로</button>
@@ -572,7 +531,6 @@ function App(){
               </div>
             </div>
           )}
-
           {settingsPage===1&&(
             <div>
               <button style={{background:"none",border:"none",color:"#1a1a1a",fontSize:15,cursor:"pointer",fontWeight:700,marginBottom:16,padding:0}} onClick={()=>setSettingsPage(null)}>← 뒤로</button>
@@ -599,7 +557,6 @@ function App(){
               </div>
             </div>
           )}
-
           {settingsPage===2&&(
             <div>
               <button style={{background:"none",border:"none",color:"#1a1a1a",fontSize:15,cursor:"pointer",fontWeight:700,marginBottom:16,padding:0}} onClick={()=>setSettingsPage(null)}>← 뒤로</button>
@@ -618,7 +575,6 @@ function App(){
               ))}
             </div>
           )}
-
           {settingsPage===3&&(
             <div>
               <button style={{background:"none",border:"none",color:"#1a1a1a",fontSize:15,cursor:"pointer",fontWeight:700,marginBottom:16,padding:0}} onClick={()=>setSettingsPage(null)}>← 뒤로</button>
