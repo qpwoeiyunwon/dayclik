@@ -109,6 +109,7 @@ function App(){
   const [userName,setUserName]=useState(()=>loadCache("userName",""));
   const [nameInput,setNameInput]=useState("");
   const [cameraActive,setCameraActive]=useState(false);
+  const [facingMode,setFacingMode]=useState("environment");
   const [accent,setAccent]=useState(()=>loadCache("accent","#555555"));
   const [profileImg,setProfileImg]=useState(()=>loadCache("profileImg",null));
   const [profileNameEdit,setProfileNameEdit]=useState("");
@@ -205,12 +206,19 @@ function App(){
   const todayPhotos=fsPhotos.filter(p=>p.dateKey===today);
   const hasPhoto=todayPhotos.some(p=>p.hourKey===hourKey&&p.user===userName);
 
-  async function openCamera(){
+  async function openCamera(facing="environment"){
     try{
-      const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"},audio:false});
+      if(streamRef.current){streamRef.current.getTracks().forEach(t=>t.stop());}
+      const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:facing},audio:false});
       streamRef.current=stream;setCameraActive(true);setTimeLeft(60);
       setTimeout(()=>{if(videoRef.current){videoRef.current.srcObject=stream;videoRef.current.play();}},80);
     }catch{alert("카메라 접근 권한이 필요합니다.");setStarted(false);}
+  }
+
+  async function switchCamera(){
+    const next=facingMode==="environment"?"user":"environment";
+    setFacingMode(next);
+    await openCamera(next);
   }
   function stopCamera(){if(streamRef.current){streamRef.current.getTracks().forEach(t=>t.stop());streamRef.current=null;}setCameraActive(false);}
 
@@ -253,11 +261,13 @@ function App(){
     if(!newChallenge.trim()){alert("주제를 먼저 입력해주세요.");return;}
     setAiLoading(true);
     try{
-      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:600,messages:[{role:"user",content:`"${newChallenge}" 주제로 포토 챌린지 미션 10개를 한국어로 만들어줘. 이모지 없이, 각각 한 문장으로, 번호 없이 줄바꿈으로만 구분해서 출력해.`}]})});
+      const res=await fetch("/.netlify/functions/ai-challenge",{
+        method:"POST",
+        body:JSON.stringify({topic:newChallenge})
+      });
       const data=await res.json();
-      const t=data.content?.[0]?.text?.trim();
-      if(t)saveChallenges([...challenges,...t.split("\n").map(l=>l.trim()).filter(Boolean).slice(0,10)]);
-    }catch{}
+      if(data.text)saveChallenges([...challenges,...data.text.split("\n").map(l=>l.trim()).filter(Boolean).slice(0,10)]);
+    }catch(e){alert("생성 실패: "+e.message);}
     setAiLoading(false);
   }
 
@@ -301,12 +311,14 @@ function App(){
       <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",pointerEvents:"none"}}>
         <span style={{fontSize:120,fontWeight:900,color:"rgba(255,255,255,0.50)",fontFamily:JALNAN,lineHeight:1}}>{timeLeft}</span>
       </div>
-      <div style={{position:"absolute",bottom:52,left:0,right:0,display:"flex",justifyContent:"space-around",alignItems:"center",padding:"0 40px"}}>
-        <button style={{background:"rgba(255,255,255,0.20)",border:"none",color:"#fff",fontWeight:700,fontSize:15,borderRadius:20,padding:"10px 22px",cursor:"pointer"}} onClick={()=>{stopCamera();setStarted(false);}}>취소</button>
+      <div style={{position:"absolute",bottom:52,left:0,right:0,display:"flex",alignItems:"center"}}>
+        <div style={{flex:1}}/>
         <button onClick={capturePhoto} style={{width:76,height:76,borderRadius:"50%",background:"rgba(255,255,255,0.88)",border:"4px solid #fff",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",boxShadow:"0 4px 20px rgba(0,0,0,0.3)"}}>
           <div style={{width:58,height:58,borderRadius:"50%",background:"#fff",border:`3px solid ${AC}`}}/>
         </button>
-        <div style={{width:68}}/>
+        <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <button style={{background:"rgba(255,255,255,0.20)",border:"none",borderRadius:"50%",width:48,height:48,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}} onClick={switchCamera} dangerouslySetInnerHTML={{__html:'<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/><path d="M20.49 15a9 9 0 0 1-14.85 3.36L1 14"/></svg>'}} />
+        </div>
       </div>
     </div>
   );
@@ -394,7 +406,7 @@ function App(){
           <div style={{background:PS,borderRadius:22,padding:"20px",marginBottom:14}}>
             <div style={{color:"#555",fontSize:11,fontWeight:700,letterSpacing:1,marginBottom:8,textTransform:"uppercase"}}>지금의 챌린지</div>
             <div style={{fontSize:17,fontWeight:700,lineHeight:1.6,color:"#111",marginBottom:18}}>{cur}</div>
-            {hasPhoto?<div style={{color:"#26a69a",fontWeight:700,fontSize:15}}>완료! 다음 챌린지를 기다려요</div>
+            {hasPhoto?<div style={{color:"#1a1a1a",fontWeight:700,fontSize:15}}>완료! 다음 챌린지를 기다려요</div>
               :expired?<div style={{color:"#e57373",fontWeight:700,fontSize:15}}>시간이 초과됐어요</div>
               :<button style={{width:"100%",padding:"14px",borderRadius:16,border:"none",background:AC,color:TC,fontWeight:700,fontSize:16,cursor:"pointer"}} onClick={()=>{if(!hasPhoto){setStarted(true);setTimeLeft(60);setExpired(false);openCamera();}}}>챌린지 시작하기</button>
             }
